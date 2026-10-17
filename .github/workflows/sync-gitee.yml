@@ -1,0 +1,54 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches: [main]
+    tags: ["**"]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Sync to Gitee (main + tags)
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -e
+          # token 直接嵌 URL 由 GitHub 自动打码
+          git remote add gitee "https://freehul:${GITEE_TOKEN}@gitee.com/freehul/winuse.git"
+
+          # Gitee 从 GitHub runner 出发偶发连接重置；两条 push 都是幂等的（--force），
+          # 各重试 3 次、退避 5/15 秒，仍失败才判红（网络抖动不该长期记成工作流红）。
+          push_with_retry() {
+            desc="$1"; shift
+            n=0
+            for delay in 0 5 15; do
+              [ "$delay" -gt 0 ] && sleep "$delay"
+              n=$((n + 1))
+              if "$@"; then
+                echo "[sync] ${desc} 成功（第 ${n} 次尝试）"
+                return 0
+              fi
+              echo "[sync] ${desc} 第 ${n} 次尝试失败"
+            done
+            echo "[sync] ${desc} 重试 3 次仍失败"
+            return 1
+          }
+
+          # main 仅在主分支事件推送；tag 事件只同步 tags。
+          # 反例（已在别的仓库踩过）：tag 事件里 checkout -B main "$GITHUB_SHA" 再强推，
+          # 会把 main 回退到 tag 指向的旧提交，丢掉之后合并的提交。
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            git checkout -B main "$GITHUB_SHA"
+            push_with_retry "main 推送" git push gitee main --force
+          else
+            echo "[sync] 非 main 分支事件（ref=${GITHUB_REF}）：仅同步 tags"
+          fi
+
+          push_with_retry "tag 推送" git push gitee --tags --force
