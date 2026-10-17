@@ -107,13 +107,20 @@ jobs:
           existing = next((x for x in listing if x.get("tag_name") == tag), None)
 
           if existing:
-              payload = {"access_token": tok, "name": name, "body": body, "prerelease": False}
+              # Gitee 的 PATCH 对必填字段做校验（漏 tag_name 会 400），与 POST 保持同形
+              payload = {"access_token": tok, "tag_name": tag, "name": name,
+                         "body": body, "prerelease": False}
               ok = call("PATCH", f"{api}/{existing['id']}", payload)
-              print(f"[release] Gitee Release {tag} 已更新（id {existing['id']}）" if ok
-                    else f"[release] {tag} 更新失败")
+              if not ok:
+                  print(f"[release] {tag} 更新失败")
+                  raise SystemExit(1)
+              print(f"[release] Gitee Release {tag} 已更新（id {existing['id']}）")
           else:
               payload = {"access_token": tok, "tag_name": tag, "name": name, "body": body,
                          "prerelease": False, "target_commitish": "main"}
               ok = call("POST", api, payload)
-              print(f"[release] Gitee Release {tag} 已创建" if ok else f"[release] {tag} 创建失败")
+              if not ok:
+                  print(f"[release] {tag} 创建失败")
+                  raise SystemExit(1)
+              print(f"[release] Gitee Release {tag} 已创建")
           PY
