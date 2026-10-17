@@ -1,0 +1,12 @@
+# 行尾符策略：脚本必须 LF（CRLF 会让 shebang 失效、bash 报 $'\r': command not found）
+*.sh                  text eol=lf
+.githooks/pre-commit  text eol=lf
+*.cmd                 text eol=crlf
+*.bat                 text eol=crlf
+
+# 二进制，避免被当文本做行尾转换
+*.png                 binary
+*.jpg                 binary
+*.jpeg                binary
+*.ico                 binary
+*.exe                 binary

@@ -1,0 +1,40 @@
+# 构建后端：让 `pip install -e ".[test]"` 能真的装起来（原先缺这一段，
+# 项目级安装路径实际是断的——虽然"零依赖"意味着不装也能跑）
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winuse"
+# 版本单一出处是 winuse/__init__.py 的 __version__（dynamic），这里不再维护第二份
+dynamic = ["version"]
+description = "WinUse — a unified desktop-capability facade for AI agents (the steering wheel on top of cua-driver)"
+readme = "README.md"
+requires-python = ">=3.10"
+# 零第三方依赖，这是**刻意**的设计约束，不是"还没加"：
+# 见 AGENTS.md「硬约束」。核心只用标准库（Windows API 走 ctypes）。
+dependencies = []
+
+# 测试依赖（开发用，不参与运行时）：pytest 是**唯一**验收入口。
+# 运行时零依赖这条约束不受影响——`pip install -e .` 不会装它。
+[project.optional-dependencies]
+# 只跑测试：pip install -e ".[test]"
+test = ["pytest>=8"]
+# 开发全套（含可选静态检查）：pip install -e ".[dev]"
+dev = ["pytest>=8", "ruff>=0.6"]
+
+# 只把 winuse 作为可安装包；adapters / scripts / tests 是仓库内目录，不是发行物
+[tool.setuptools.dynamic]
+version = { attr = "winuse.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["winuse*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 让裸 `pytest` 与 `pytest -q` 行为一致，避免"我这儿过了"的出入
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

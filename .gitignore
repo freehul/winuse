@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 项目内虚拟环境（推荐用它装测试/开发依赖，别装进全局解释器）
+.venv/
+venv/
+
+# 工具缓存
+.pytest_cache/
+.ruff_cache/
+
+# 本地配置与数据（.env 可能含凭据，绝不入库；模板见 .env.example）
+.env
+data/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# 宿主工具目录（WorkBuddy 等外部宿主自己建的，不属于本项目）
+.workbuddy/
+
+# 内部工程文档（Backlog / 设计契约 / 审查报告 / 调研）：不随公开仓库发布
+docs/

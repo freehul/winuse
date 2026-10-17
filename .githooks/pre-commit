@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# WinUse 数据卫生门禁（pre-commit）。
+#
+# 定位：**兜底**，不替代规范。规范见 AGENTS.md「数据卫生」。
+# 作用：拦住"真实设备地址 / 本机绝对用户路径 / 凭据"误入版本库。
+#
+# 启用（每台机器一次）：sh scripts/install_git_hooks.sh
+# 绕过（仅限明知故犯的自查场景）：git commit --no-verify
+#
+# 豁免清单：.datascanignore（fnmatch，逐行一条）
+
+set -uo pipefail
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$repo_root" || exit 0
+ignore_file="$repo_root/.datascanignore"
+
+is_ignored() {
+  local path="$1" pat
+  [ -f "$ignore_file" ] || return 1
+  while IFS= read -r pat || [ -n "$pat" ]; do
+    case "$pat" in '' | '#'*) continue ;; esac
+    # shellcheck disable=SC2254
+    case "$path" in $pat) return 0 ;; esac
+  done <"$ignore_file"
+  return 1
+}
+
+# 命中任一即拦：内网地址 / 本机用户路径 / 常见凭据形态
+# 注：本项目 Windows 专属，只拦 C:\Users\<user>；不加 /home/<user>/ 这类
+#     通用 POSIX 路径规则（会误伤测试里的 /home/u 这类假路径）。
+PATTERNS='192\.168\.'
+PATTERNS+='|(^|[^0-9.])10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'
+PATTERNS+='|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.'
+PATTERNS+='|C:[\\/]Users[\\/]'
+PATTERNS+='|sk-[A-Za-z0-9]{16,}'
+PATTERNS+='|ark-[A-Za-z0-9]{8,}'
+PATTERNS+='|agt_[A-Za-z0-9]{8,}'
+PATTERNS+='|Bearer[[:space:]]+[A-Za-z0-9._-]{20,}'
+PATTERNS+='|(password|passwd|secret|api[_-]?key|access[_-]?token|token)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9._-]{12,}'
+
+fail=0
+while IFS= read -r -d '' path; do
+  [ -n "$path" ] || continue
+  is_ignored "$path" && continue
+  [ -f "$path" ] || continue
+  # 跳过二进制（grep -I 已处理），只看文本
+  # 行内豁免 `datascan:ok`：命中行尾带这个标记就跳过该行。用于「代码形状像凭据、实际是
+  # 普通标识符」的假阳性（实锤：`index, token = _as_element_ref(...)` 被凭据赋值规则命中）。
+  # 行内豁免比文件级豁免（.datascanignore）精确得多——后者让整个文件永久不再被扫描，
+  # 用一次假阳性换掉一个真门禁不划算；行内豁免只放弃那一行。
+  raw=$(grep -nIE -- "$PATTERNS" "$path" 2>/dev/null || true)
+  hits=$(printf '%s\n' "$raw" | grep -v 'datascan:ok' || true)
+  exempted=$(printf '%s\n' "$raw" | grep -c 'datascan:ok' || true)
+  if [ -n "$raw" ] && [ "${exempted:-0}" -gt 0 ]; then
+    # 豁免要留痕：否则「门禁为什么没拦」永远查不清
+    echo "[数据卫生] ${path}：${exempted} 行经 'datascan:ok' 行内豁免（未拦截）" >&2
+  fi
+  if [ -n "$hits" ]; then
+    if [ "$fail" -eq 0 ]; then
+      echo "[数据卫生] 提交被拦下：以下位置疑似真实值，请改用占位符。" >&2
+      echo "           规范见 AGENTS.md「数据卫生」；文件级豁免 .datascanignore；" >&2
+      echo "           单行假阳性用行尾注释 datascan:ok（行内豁免，会打印豁免计数）。" >&2
+      echo >&2
+    fi
+    fail=1
+    printf '  %s\n' "$path" >&2
+    printf '%s\n' "$hits" | sed 's/^/    /' | cut -c1-200 >&2
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM -z)
+
+if [ "$fail" -ne 0 ]; then
+  echo >&2
+  echo "已阻止提交。修好后再提交（确认无风险才用 --no-verify 绕过）。" >&2
+  exit 1
+fi
+
+exit 0

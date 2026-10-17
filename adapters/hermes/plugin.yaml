@@ -1,0 +1,6 @@
+name: winuse
+version: "0.1.0"
+description: "WinUse —— 桌面能力统一门面（cua-driver 之上的方向盘）：文本优先取状态、元素索引动作、多屏/DPI 事实。瘦门面：业务逻辑全在项目核心，本插件只做协议翻译"
+author: "freehul"
+license: MIT
+kind: backend
